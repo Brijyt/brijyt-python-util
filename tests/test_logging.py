@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from unittest.mock import Mock, patch
 
 import pytest
@@ -62,6 +63,69 @@ class TestConfigureLogging:
         assert "standard" in call_args["formatters"]
         formatter_config = call_args["formatters"]["standard"]
         assert formatter_config["api_version"] == "1.0.0"
+
+    @patch("brijyt_util.logging.logging.config.dictConfig")
+    def test_configure_logging_console_format_when_log_format_console(self, mock_dict_config):
+        with patch.dict("os.environ", {"LOG_FORMAT": "console"}, clear=False):
+            configure_logging("0.1.0")
+        call_args = mock_dict_config.call_args[0][0]
+        assert call_args["handlers"]["console"]["formatter"] == "console"
+        assert "console" in call_args["formatters"]
+        assert call_args["formatters"]["console"]["()"].__name__ == "ConsoleLog"
+
+    @patch("brijyt_util.logging.logging.config.dictConfig")
+    def test_configure_logging_console_format_when_log_format_human(self, mock_dict_config):
+        with patch.dict("os.environ", {"LOG_FORMAT": "human"}, clear=False):
+            configure_logging("0.1.0")
+        call_args = mock_dict_config.call_args[0][0]
+        assert call_args["handlers"]["console"]["formatter"] == "console"
+
+
+class TestConsoleLogFormat:
+    """Test ConsoleLog one-line format: HH:MM:SS LEVEL msg contextVar: {}."""
+
+    def test_console_log_format_contains_time_level_msg_context_var(self):
+        from brijyt_util.logging import ConsoleLog
+
+        set_correlation_id("cid-123")
+        formatter = ConsoleLog(api_version="1.0.0")
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
+        )
+        record.getMessage = lambda: "hello"
+        output = formatter.format(record)
+        assert re.search(r"\d{2}:\d{2}:\d{2}", output)
+        assert "INFO" in output
+        assert "hello" in output
+        assert "contextVar:" in output
+        assert "cid-123" in output or "correlationId" in output
+
+    def test_console_log_format_includes_extra_kwargs(self):
+        from brijyt_util.logging import ConsoleLog
+
+        set_correlation_id("")
+        formatter = ConsoleLog(api_version="")
+        record = logging.LogRecord(
+            name="test",
+            level=logging.DEBUG,
+            pathname="",
+            lineno=0,
+            msg="msg",
+            args=(),
+            exc_info=None,
+        )
+        record.getMessage = lambda: "msg"
+        record.userId = "u1"
+        output = formatter.format(record)
+        assert "contextVar:" in output
+        assert "userId" in output or "u1" in output
+
 
 class TestGetLogger:
     def test_get_logger_returns_logger_adapter(self):

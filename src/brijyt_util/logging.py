@@ -99,6 +99,39 @@ class CustomJSONLog(logging.Formatter):
         return json.dumps(ordered, default=str)
 
 
+def _build_context_dict(record: logging.LogRecord) -> dict[str, Any]:
+    """Build context dict: correlationId, bound context vars, and record extra (for ConsoleLog)."""
+    ctx: dict[str, Any] = {"correlationId": get_correlation_id()}
+    for key, value in _log_context_var.get().items():
+        ctx[key] = value
+    for key, value in record.__dict__.items():
+        if key not in _STANDARD_RECORD_ATTRS:
+            ctx[key] = value
+    return ctx
+
+
+class ConsoleLog(logging.Formatter):
+    """
+    Single-line human-readable formatter: HH:MM:SS LEVEL message contextVar: {}.
+    Optional stacktrace on the next line when an exception is logged.
+    """
+
+    def __init__(self, api_version: str = "") -> None:
+        super().__init__()
+        self.api_version = api_version
+
+    def format(self, record: logging.LogRecord) -> str:
+        time_str = datetime.now(UTC).strftime("%H:%M:%S")
+        level = record.levelname
+        msg = record.getMessage()
+        context = _build_context_dict(record)
+        context_str = json.dumps(context, default=str)
+        line = f"{time_str} {level} {msg} contextVar: {context_str}"
+        if record.exc_info:
+            line += "\n" + traceback.format_exc(limit=None)
+        return line
+
+
 def _sanitize_extra(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Prefix keys that conflict with LogRecord attributes so extra can be stored."""
     out: dict[str, Any] = {}
@@ -133,11 +166,12 @@ class LoggerAdapter:
 
 
 def configure_logging(api_version: str) -> None:
-    """Configure logging with JSON output for the app package only."""
+    """Configure logging for the app package. Use LOG_FORMAT=console or human for readable one-line output."""
 
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level_str, logging.INFO)
+    log_format = (os.getenv("LOG_FORMAT") or "json").strip().lower()
 
+    formatter_name = "console" if log_format in ("console", "human") else "standard"
     log_config = {
         "version": 1,
         "formatters": {
@@ -145,12 +179,16 @@ def configure_logging(api_version: str) -> None:
                 "()": CustomJSONLog,
                 "api_version": api_version,
             },
+            "console": {
+                "()": ConsoleLog,
+                "api_version": api_version,
+            },
         },
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
                 "level": log_level_str,
-                "formatter": "standard",
+                "formatter": formatter_name,
                 "stream": "ext://sys.stdout",
             },
         },

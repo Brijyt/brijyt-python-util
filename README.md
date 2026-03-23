@@ -18,7 +18,7 @@ pip install "brijyt-python-util @ git+https://github.com/Brijyt/brijyt-python-ut
 
 ## Features
 
-- **JSON logging**: Structured logs with `@timestamp`, `level`, `msg`, `method`, `correlationId`, `version`, and optional extra fields.
+- **JSON logging**: Structured logs with `@timestamp`, `level`, `msg`, `method`, `correlationId`, `version`, and optional extra fields. Use `LOG_FORMAT=console` or `LOG_FORMAT=human` locally for one-line readable output.
 - **Correlation ID**: Context-local correlation ID via `contextvars`, readable and writable across the request lifecycle.
 - **Log context**: Bind extra key-value pairs (e.g. `userId`) that are included in every log line.
 - **CorrelationIdMiddleware**: Starlette/FastAPI middleware that reads or generates `X-Correlation-Id` and propagates it in the response.
@@ -39,7 +39,10 @@ logger.info("message", key="value")
 logger.error("Error: %s", str(e))
 ```
 
-Log level is controlled by the `LOG_LEVEL` environment variable (default: `INFO`). Only the `app` logger is configured; third-party loggers (uvicorn, crewai, LiteLLM, etc.) are set to WARNING to reduce noise.
+- **LOG_LEVEL**: Log level (default: `INFO`).
+- **LOG_FORMAT**: `json` (default) for structured JSON; `console` or `human` for a single-line format: `HH:MM:SS LEVEL message contextVar: {}` (useful for local development).
+
+Only the `app` logger is configured; third-party loggers (uvicorn, crewai, LiteLLM, etc.) are set to WARNING to reduce noise.
 
 ### Correlation ID middleware (FastAPI / Starlette)
 
@@ -79,7 +82,7 @@ unbind_contextvars("userId")
 
 | Export | Description |
 |--------|-------------|
-| `configure_logging(api_version: str)` | Configure JSON logging for the `app` logger. |
+| `configure_logging(api_version: str)` | Configure logging for the `app` logger (JSON by default; use `LOG_FORMAT=console` for readable one-line output). |
 | `get_logger(name: str)` | Return a `LoggerAdapter` for the given module name. |
 | `get_correlation_id()` | Return the current correlation ID. |
 | `set_correlation_id(correlation_id: str)` | Set the correlation ID for the current context. |
