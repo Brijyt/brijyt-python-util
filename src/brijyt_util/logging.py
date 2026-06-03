@@ -143,26 +143,47 @@ def _sanitize_extra(kwargs: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_STDLOG_KWARG_KEYS = frozenset({"exc_info", "stack_info", "stacklevel", "extra"})
+
+
+def _split_log_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split stdlib logging kwargs from structured extra fields."""
+    log_kwargs: dict[str, Any] = {}
+    remaining = kwargs.copy()
+    for key in _STDLOG_KWARG_KEYS:
+        if key in remaining:
+            log_kwargs[key] = remaining.pop(key)
+    extra = _sanitize_extra(remaining)
+    if "extra" in log_kwargs:
+        extra = {**log_kwargs.pop("extra"), **extra}
+    log_kwargs["extra"] = extra
+    return log_kwargs
+
+
 class LoggerAdapter:
     """Adapter so callers can use logger.info('msg', key=val) like structlog."""
 
     def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
 
+    def _log(self, level_method: Any, msg: str, *args: Any, **kwargs: Any) -> None:
+        level_method(msg, *args, **_split_log_kwargs(kwargs))
+
     def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.debug(msg, *args, extra=_sanitize_extra(kwargs))
+        self._log(self._logger.debug, msg, *args, **kwargs)
 
     def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.info(msg, *args, extra=_sanitize_extra(kwargs))
+        self._log(self._logger.info, msg, *args, **kwargs)
 
     def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.warning(msg, *args, extra=_sanitize_extra(kwargs))
+        self._log(self._logger.warning, msg, *args, **kwargs)
 
     def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.error(msg, *args, extra=_sanitize_extra(kwargs))
+        self._log(self._logger.error, msg, *args, **kwargs)
 
     def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._logger.exception(msg, *args, extra=_sanitize_extra(kwargs))
+        kwargs.setdefault("exc_info", True)
+        self._log(self._logger.exception, msg, *args, **kwargs)
 
 
 def configure_logging(api_version: str) -> None:

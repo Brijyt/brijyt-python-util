@@ -170,3 +170,14 @@ class TestLoggerAdapter:
         adapter.exception("oops", code=500)
         mock_logger.exception.assert_called_once()
         assert mock_logger.exception.call_args[1]["extra"].get("code") == 500
+        assert mock_logger.exception.call_args[1]["exc_info"] is True
+
+    def test_error_with_exc_info_forwards_to_stdlib(self):
+        mock_logger = Mock()
+        adapter = LoggerAdapter(mock_logger)
+        adapter.error("failed", code=500, exc_info=True)
+        mock_logger.error.assert_called_once()
+        call_kwargs = mock_logger.error.call_args[1]
+        assert call_kwargs["exc_info"] is True
+        assert call_kwargs["extra"].get("code") == 500
+        assert "exc_info" not in call_kwargs["extra"]
