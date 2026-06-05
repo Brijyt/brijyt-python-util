@@ -8,8 +8,10 @@ from unittest.mock import Mock, patch
 import pytest
 
 from brijyt_util import (
+    TRACE_LEVEL,
     LoggerAdapter,
     configure_logging,
+    resolve_log_level,
     get_correlation_id,
     get_log_context,
     get_logger,
@@ -50,6 +52,14 @@ class TestLogContext:
         assert "foo" not in ctx
         assert ctx.get("baz") == "qux"
         unbind_contextvars("baz")
+
+
+class TestResolveLogLevel:
+    def test_trace_maps_to_custom_level(self):
+        assert resolve_log_level("trace") == TRACE_LEVEL
+
+    def test_debug_maps_to_stdlib(self):
+        assert resolve_log_level("DEBUG") == logging.DEBUG
 
 
 class TestConfigureLogging:
@@ -163,6 +173,18 @@ class TestLoggerAdapter:
         mock_logger.error.assert_called_once()
         assert mock_logger.error.call_args[0][:2] == ("Error: %s", "something failed")
         assert "extra" in mock_logger.error.call_args[1]
+
+    def test_trace_forwards_to_stdlib_log_level(self):
+        from brijyt_util.logging import TRACE_LEVEL
+
+        mock_logger = Mock()
+        adapter = LoggerAdapter(mock_logger)
+        adapter.trace("verbose", kid="kid-A")
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == TRACE_LEVEL
+        assert call_args[0][1] == "verbose"
+        assert call_args[1]["extra"].get("kid") == "kid-A"
 
     def test_exception_forwards_to_stdlib(self):
         mock_logger = Mock()

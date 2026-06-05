@@ -41,6 +41,19 @@ def get_log_context() -> dict[str, Any]:
     return {"correlationId": get_correlation_id(), **_log_context_var.get()}
 
 
+# Below DEBUG (10); enable with LOG_LEVEL=TRACE
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, "TRACE")
+
+
+def resolve_log_level(level_name: str) -> int:
+    """Map LOG_LEVEL env value to a stdlib logging level (supports TRACE)."""
+    normalized = level_name.upper()
+    if normalized == "TRACE":
+        return TRACE_LEVEL
+    return getattr(logging, normalized, logging.INFO)
+
+
 # Standard LogRecord attribute names (used to exclude from extra merge)
 _STANDARD_RECORD_ATTRS = frozenset(
     {
@@ -169,6 +182,10 @@ class LoggerAdapter:
     def _log(self, level_method: Any, msg: str, *args: Any, **kwargs: Any) -> None:
         level_method(msg, *args, **_split_log_kwargs(kwargs))
 
+    def trace(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        log_kwargs = _split_log_kwargs(kwargs)
+        self._logger.log(TRACE_LEVEL, msg, *args, **log_kwargs)
+
     def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
         self._log(self._logger.debug, msg, *args, **kwargs)
 
@@ -190,6 +207,7 @@ def configure_logging(api_version: str) -> None:
     """Configure logging for the app package. Use LOG_FORMAT=console or human for readable one-line output."""
 
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = resolve_log_level(log_level_str)
     log_format = (os.getenv("LOG_FORMAT") or "json").strip().lower()
 
     formatter_name = "console" if log_format in ("console", "human") else "standard"
@@ -208,7 +226,7 @@ def configure_logging(api_version: str) -> None:
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": log_level_str,
+                "level": log_level,
                 "formatter": formatter_name,
                 "stream": "ext://sys.stdout",
             },
@@ -219,7 +237,7 @@ def configure_logging(api_version: str) -> None:
                 "handlers": [],
             },
             "app": {
-                "level": log_level_str,
+                "level": log_level,
                 "handlers": ["console"],
                 "propagate": False,
             },
